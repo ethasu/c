@@ -2,8 +2,8 @@
 // arg
 //  -LPF X: low path filter output filting data
 //  -HPF X: high path filter ouput filting data
-//  -wind hann    : 
-//        hamming : 
+//  -wind -hann    : 
+//        -hamming : 
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,29 +14,39 @@
 
 #define MAX_LINE 30000
 #define PI 3.14159265358979323846264338327950288
+#define HANN 1
+#define HAMMING 2
 
 int main(int argc, char *argv[])
 {
     int i, line, hiki, N;
     int flg_wind=0, lpf_ind=0, hpf_ind=0;
     double x[MAX_LINE], y[MAX_LINE], y2[MAX_LINE], thr, k;
+    double period=1;
 
     fftw_complex *in, *out;
     fftw_plan p;
 
     // option setting
-    if(argc>3){
+    if(argc>2){
         for(i=0; i<argc; i++){
             if(strcmp(argv[i], "-wind")==0){
-                if(strcmp(argv[i+1], "hann")==0){
-                    flg_wind = 1;
-                }else if(strcmp(argv[i+1], "hamming")==0){
-                    flg_wind = 2;
+                if(strcmp(argv[i+1], "-hann")==0){
+                    flg_wind = HANN;
+                }else if(strcmp(argv[i+1], "-hamming")==0){
+                    flg_wind = HAMMING;
                 }
             }
             if(strcmp(argv[i], "-lpf")==0 ||
                strcmp(argv[1], "-LPF")==0){
                 lpf_ind = atoi(argv[i+1]);
+            }
+            if(strcmp(argv[i], "-hpf")==0 ||
+               strcmp(argv[1], "-hPF")==0){
+                hpf_ind = atoi(argv[i+1]);
+            }
+            if(strcmp(argv[i], "-period")==0){
+                period = atof(argv[i+1]);
             }
         }
     }
@@ -63,7 +73,7 @@ int main(int argc, char *argv[])
             in[i] *= 0.5 - 0.5*cos(2*PI*(double)i/(double)N);
         }else if(flg_wind == 2){
             // hamming window
-            in[i] *= 0.54 - 0.46*cos(2*PI/(double)i/(double)N);
+            in[i] *= 0.54 - 0.46*cos(2*PI*(double)i/(double)N);
         }
         // tukey window
         // in[i] *= ;
@@ -74,32 +84,29 @@ int main(int argc, char *argv[])
     // fft exec
     fftw_execute(p);
 
-    // output
-    if(argc<3){
+    // output(x axis frequency)
+    if(lpf_ind==0 && hpf_ind==0){
         for(i=0; i<N/2; i++){
             out[i] *= k;
             double re = creal(out[i]);
             double im = cimag(out[i]);
-            printf("%lf %lf\n",sqrt(re*re + im*im), atan2(im, re)/PI);
+            printf("%lf %g %g %g %g\n",(double)i/(double)N/(double)period, sqrt(re*re + im*im), atan2(im, re)/PI, re, im);
         }
         return 0;
     }
 
     /* filter excute */
     memset(in, 0+0*I, sizeof(in));
-    thr = atoi(argv[2]);
     // LPF
-    if(strcmp(argv[1],"-lpf")==0 ||
-       strcmp(argv[1],"-LPF")==0){
+    if(lpf_ind != 0){
         for(i=0; i<(line+1)/2; i++){
-            if(i <= thr)in[i] = out[i];
+            if(i <= lpf_ind)in[i] = out[i];
         }
         in[0] *= 0.5;
     // HPF
-    }else if(strcmp(argv[1],"-hpf")==0 ||
-             strcmp(argv[1],"-HPF")==0){
+    }else if(hpf_ind != 0){
         for(i=0; i<(line+1)/2; i++){
-            if(i >= thr)in[i] = out[i];
+            if(i >= hpf_ind)in[i] = out[i];
         }
         in[0] *= 0.5;
     }else{
@@ -112,16 +119,19 @@ int main(int argc, char *argv[])
     p = fftw_plan_dft_1d(N, in, out, FFTW_BACKWARD, FFTW_ESTIMATE );
     fftw_execute(p);
 
+    // backfoward
     for(i=0; i<line; i++){
         double re = creal(out[i])*k;
-        if(flg_wind == 1){
+        if(flg_wind == HANN){
             if(0.5 - 0.5*cos(2*PI*(double)i/(double)N) > __DBL_MIN__*100){
                 re /= 0.5 - 0.5*cos(2*PI*(double)i/(double)N);
             }else{
                 re = 0;
             }
+        }else if(flg_wind == HAMMING){
+            re /= 0.54 - 0.46*cos(2*PI*(double)i/(double)N);
         }
-        printf("%lf\n",re);
+        printf("%g\n",re);
     }
 
     // memory release
